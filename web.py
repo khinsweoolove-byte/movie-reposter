@@ -2,6 +2,8 @@
 import asyncio
 import os
 import threading
+import time
+import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import movie_reposter
@@ -14,7 +16,21 @@ def run_worker():
         print("WORKER_ERR", type(exc).__name__, str(exc)[:300], flush=True)
 
 
+def self_ping():
+    """Keep the free web service awake between hourly batches."""
+    while True:
+        time.sleep(600)
+        url = os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/")
+        if not url:
+            url = "https://movie-reposter.onrender.com"
+        try:
+            urllib.request.urlopen(url + "/health", timeout=20).read()
+        except Exception as exc:
+            print("SELF_PING_ERR", type(exc).__name__, flush=True)
+
+
 threading.Thread(target=run_worker, daemon=True, name="movie-worker").start()
+threading.Thread(target=self_ping, daemon=True, name="self-ping").start()
 
 
 class Handler(BaseHTTPRequestHandler):
