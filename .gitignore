@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.log
+*.tmp
+session*.txt
+tmdb_key.txt
+movie_repost_state.json
+.env
+.env.*
+*.pem
+*.key

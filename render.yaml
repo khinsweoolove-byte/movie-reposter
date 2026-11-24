@@ -1,0 +1,24 @@
+services:
+  - type: worker
+    name: movie-reposter
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python movie_reposter.py --hourly
+    envVars:
+      - key: USER_SESSION
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: TMDB_API_KEY
+        sync: false
+      - key: HOURLY
+        value: "1"
+      - key: POSTS_PER_HOUR
+        value: "5"
+      - key: INTERVAL_SECONDS
+        value: "720"
+      - key: DAILY_LIMIT
+        value: "0"
+      - key: NOTIFY_CHAT
+        value: me
