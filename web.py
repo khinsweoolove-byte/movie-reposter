@@ -1,5 +1,6 @@
 """Small HTTP server that keeps the hourly movie worker alive on Render."""
 import asyncio
+import json
 import os
 import threading
 import time
@@ -8,12 +9,18 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import movie_reposter
 
+WORKER_STATUS = {"state": "starting", "error": ""}
+
 
 def run_worker():
     try:
+        WORKER_STATUS["state"] = "running"
         asyncio.run(movie_reposter.main())
+        WORKER_STATUS["state"] = "finished"
     except Exception as exc:
-        print("WORKER_ERR", type(exc).__name__, str(exc)[:300], flush=True)
+        WORKER_STATUS["state"] = "error"
+        WORKER_STATUS["error"] = type(exc).__name__ + ": " + str(exc)[:300]
+        print("WORKER_ERR", WORKER_STATUS["error"], flush=True)
 
 
 def self_ping():
@@ -35,16 +42,21 @@ threading.Thread(target=self_ping, daemon=True, name="self-ping").start()
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path.startswith("/health") or self.path.startswith("/status"):
+        if self.path.startswith("/status"):
+            body = json.dumps(WORKER_STATUS).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+        elif self.path.startswith("/health"):
             body = b"ok"
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
         else:
             self.send_response(404)
             self.end_headers()
+            return
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, *args):
         pass
