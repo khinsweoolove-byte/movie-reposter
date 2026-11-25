@@ -132,6 +132,28 @@ async def notify_completion(client, state, newest):
         log("COMPLETION_DM_FAIL", type(exc).__name__)
 
 
+async def notify_failure(client, unit, reason):
+    """Send a Saved Messages alert with a direct link to the failed source post."""
+    chat = os.getenv("NOTIFY_CHAT", "me").strip() or "me"
+    stamp = datetime.now(MMT).strftime("%Y-%m-%d %H:%M")
+    vid = int(unit["video"])
+    channel_id = abs(SOURCE) - 1000000000000
+    link = f"https://t.me/c/{channel_id}/{vid}"
+    text = (
+        "❌ ဒီဇာတ်ကားပို့လို့ မရခဲ့ဘူး\n"
+        f"Title: {unit['title'][:140]}\n"
+        f"Link: {link}\n"
+        f"Video msg: {vid} | Files: {len(unit['videos'])}\n"
+        f"Reason: {str(reason)[:220]}\n"
+        f"Time: {stamp}"
+    )
+    try:
+        await retry(lambda: client.send_message(chat, text), times=2)
+        log("FAIL_DM_SENT", vid)
+    except Exception as exc:
+        log("FAIL_DM_FAIL", type(exc).__name__)
+
+
 def norm(value):
     return " ".join(re.findall(r"[a-z0-9]+", (value or "").lower()))
 
@@ -479,6 +501,7 @@ async def run_batch(client, bot, src, state, args):
                 "title": unit["title"], "date": stamp,
                 "why": str(reply)[:200]}
             log("FAIL", uid, str(reply)[:160])
+            await notify_failure(client, unit, reply)
         state["cursor"] = max(int(state.get("cursor", 4)),
                               unit["video"] + 1)
         save_state(state)
