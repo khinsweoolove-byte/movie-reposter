@@ -520,23 +520,43 @@ async def main():
     if hourly and args.posts_per_hour <= 0:
         args.posts_per_hour = 5
     args.hourly_limit = args.posts_per_hour if hourly else 0
+    hours = []
+    if hourly:
+        hours = sorted({int(h) for h in
+                        os.getenv("BATCH_HOURS", "0,12").split(",")
+                        if h.strip()})
+
+    def next_slot(now):
+        if not hours:
+            return now
+        times = []
+        for h in hours:
+            t = now.replace(hour=h, minute=0, second=0, microsecond=0)
+            if t <= now:
+                t += timedelta(days=1)
+            times.append(t)
+        return min(times)
 
     state = load_state()
     client = TelegramClient(StringSession(session_string()), API_ID, API_HASH)
     await client.connect()
     try:
         me = await client.get_me()
-        log("USER", me.id, "MODE", "hourly" if hourly else "single")
+        log("USER", me.id, "MODE", "scheduled" if hourly else "single",
+            "HOURS", hours)
         src = await retry(lambda: client.get_entity(SOURCE))
         bot = await retry(lambda: client.get_entity(BOT))
+        if hourly and os.getenv("RUN_NOW", "0") != "1":
+            now = datetime.now(MMT)
+            wait = max(60, int((next_slot(now) - now).total_seconds()) + 5)
+            log("NEXT_BATCH_IN", wait, "s")
+            await asyncio.sleep(wait)
         while True:
             made, newest = await run_batch(client, bot, src, state, args)
             if state.get("completed_notified") or not hourly:
                 break
             now = datetime.now(MMT)
-            nxt = (now + timedelta(hours=1)).replace(
-                minute=0, second=0, microsecond=0)
-            wait = max(60, int((nxt - now).total_seconds()) + 5)
+            wait = max(60, int((next_slot(now) - now).total_seconds()) + 5)
             log("NEXT_BATCH_IN", wait, "s", "MADE", made)
             await asyncio.sleep(wait)
     finally:
