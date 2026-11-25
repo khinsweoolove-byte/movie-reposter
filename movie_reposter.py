@@ -431,10 +431,12 @@ async def run_batch(client, bot, src, state, args):
     cursor = int(state.get("cursor", 4))
     start_id = args.start if args.start is not None else cursor
     if args.start is None and state["failed"]:
-        # Retry failed movies, with a little lookback for their poster/text.
-        start_id = min([start_id] + [int(k) for k in state["failed"]]) - 20
+        # Retry failed movies, with a little lookback for their poster/text,
+        # but never let an old failure shrink the fresh window at the cursor.
+        retry_lo = min([start_id] + [int(k) for k in state["failed"]]) - 20
+        start_id = min(start_id, retry_lo)
     lo = max(1, start_id)
-    hi = min(newest, lo + args.window - 1)
+    hi = min(newest, max(lo + args.window - 1, cursor + args.window - 1))
     log("SCAN", lo, hi, "NEWEST", newest, "CURSOR", cursor,
         "FAILED", len(state["failed"]))
     ids = list(range(lo, hi + 1))
@@ -500,7 +502,8 @@ async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", type=int, default=None,
                     help="source message id; defaults to saved cursor")
-    ap.add_argument("--window", type=int, default=120)
+    ap.add_argument("--window", type=int,
+                    default=int(os.getenv("WINDOW", "120")))
     ap.add_argument("--pilot", type=int, default=0, help="max new movies, 0=loop")
     ap.add_argument("--daily", type=int,
                     default=int(os.getenv("DAILY_LIMIT", "50")))
